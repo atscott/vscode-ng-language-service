@@ -405,6 +405,10 @@ export class Session {
       }
       if (project.languageServiceEnabled) {
         project.refreshDiagnostics();  // Show initial diagnostics
+        // Mark the project as dirty because the act of opening a
+        // file may result in the version changing since TypeScript will
+        // `switchToScriptVersionCache` when a file is opened.
+        // project.markAsDirty();
       }
     } catch (error) {
       if (this.isProjectLoading) {

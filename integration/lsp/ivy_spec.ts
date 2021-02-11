@@ -71,6 +71,25 @@ describe('Angular Ivy language server', () => {
     });
   });
 
+  fit('can get information about an inline template if file is read before open', async () => {
+    openTextDocument(client, FOO_COMPONENT);
+    const languageServiceEnabled = await waitForNgcc(client);
+    expect(languageServiceEnabled).toBeTrue();
+    // await getDiagnosticsForFile(client, APP_COMPONENT);
+
+    openTextDocument(client, APP_COMPONENT);
+    const response = await client.sendRequest(lsp.HoverRequest.type, {
+      textDocument: {
+        uri: `file://${APP_COMPONENT}`,
+      },
+      position: {line: 4, character: 25},
+    });
+    expect(response?.contents).toContain({
+      language: 'typescript',
+      value: '(property) AppComponent.name: string',
+    });
+  });
+
   it('should show existing diagnostics on external template', async () => {
     client.sendNotification(lsp.DidOpenTextDocumentNotification.type, {
       textDocument: {
