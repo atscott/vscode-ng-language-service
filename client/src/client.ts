@@ -9,12 +9,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import {getLanguageService} from 'vscode-html-languageservice';
 import * as lsp from 'vscode-languageclient/node';
+import {TextDocument} from 'vscode-languageserver-textdocument';
 
 import {ProjectLoadingFinish, ProjectLoadingStart, SuggestIvyLanguageService, SuggestIvyLanguageServiceParams, SuggestStrictMode, SuggestStrictModeParams} from '../common/notifications';
 import {NgccProgress, NgccProgressToken, NgccProgressType} from '../common/progress';
 import {GetComponentsWithTemplateFile, GetTcbRequest} from '../common/requests';
 
+import {getHTMLVirtualContent, isInsideInlineTemplateRegion} from './embeddedSupport';
 import {ProgressReporter} from './progress-reporter';
 
 interface GetTcbResponse {
@@ -29,8 +32,17 @@ export class AngularLanguageClient implements vscode.Disposable {
   private readonly outputChannel: vscode.OutputChannel;
   private readonly clientOptions: lsp.LanguageClientOptions;
   private readonly name = 'Angular Language Service';
+  private readonly virtualDocumentContents = new Map<string, string>();
 
   constructor(private readonly context: vscode.ExtensionContext) {
+    vscode.workspace.registerTextDocumentContentProvider('angular-embedded-content', {
+      provideTextDocumentContent: uri => {
+        const originalUri = uri.path.slice(1).slice(0, '.html'.length * -1);
+        const decodedUri = decodeURIComponent(originalUri);
+        return this.virtualDocumentContents.get(decodedUri);
+      }
+    });
+
     this.outputChannel = vscode.window.createOutputChannel(this.name);
     // Options to control the language client
     this.clientOptions = {
@@ -50,6 +62,67 @@ export class AngularLanguageClient implements vscode.Disposable {
       // Don't let our output console pop open
       revealOutputChannelOn: lsp.RevealOutputChannelOn.Never,
       outputChannel: this.outputChannel,
+      middleware: {
+        provideFoldingRanges: async (document, context, token, next) => {
+          const originalUri = document.uri.toString();
+          const vdocContents = getHTMLVirtualContent(document.getText());
+          this.virtualDocumentContents.set(originalUri, vdocContents);
+
+          const vdocUriString =
+              `angular-embedded-content://html/${encodeURIComponent(originalUri)}.html`;
+          const vdocUri = vscode.Uri.parse(vdocUriString);
+          const htmlLS = getLanguageService();
+          const vdoc = TextDocument.create(vdocUri.toString(), 'html', 0, vdocContents);
+          if (!this.client) {
+            return;
+          }
+          return htmlLS.getFoldingRanges(vdoc, context)
+              .map(this.client.protocol2CodeConverter.asFoldingRange);
+        },
+        provideHover: async (document, position, token, next) => {
+          const angularResults = await next(document, position, token);
+          // If Angular provided results or not in inline template, do not perform request
+          // forwarding
+          if (angularResults || document.languageId !== 'typescript' ||
+              !isInsideInlineTemplateRegion(document.getText(), document.offsetAt(position))) {
+            return angularResults;
+          }
+
+          const originalUri = document.uri.toString();
+          const vdocContents = getHTMLVirtualContent(document.getText());
+          this.virtualDocumentContents.set(originalUri, vdocContents);
+
+          const vdocUriString =
+              `angular-embedded-content://html/${encodeURIComponent(originalUri)}.html`;
+          const vdocUri = vscode.Uri.parse(vdocUriString);
+          const result = await vscode.commands.executeCommand<vscode.Hover[]>(
+              'vscode.executeHoverProvider', vdocUri, position);
+          return result?.[0];
+        },
+        provideCompletionItem: async (document, position, context, token, next) => {
+          const angularCompletions =
+              await next(document, position, context, token) as vscode.CompletionItem[] | null |
+              undefined;
+          // If not in inline template, do not perform request forwarding
+          if (document.languageId !== 'typescript' ||
+              !isInsideInlineTemplateRegion(document.getText(), document.offsetAt(position))) {
+            return angularCompletions;
+          }
+
+          const originalUri = document.uri.toString();
+          const vdocContents = getHTMLVirtualContent(document.getText());
+          this.virtualDocumentContents.set(originalUri, vdocContents);
+
+          const vdocUriString =
+              `angular-embedded-content://html/${encodeURIComponent(originalUri)}.html`;
+          const vdocUri = vscode.Uri.parse(vdocUriString);
+          // This will not include angular stuff because the vdoc is not associated with an angular
+          // component
+          const otherCompletions = await vscode.commands.executeCommand<vscode.CompletionList>(
+              'vscode.executeCompletionItemProvider', vdocUri, position, context.triggerCharacter);
+          return [...(angularCompletions ?? []), ...(otherCompletions?.items ?? [])];
+        }
+      }
     };
   }
 
