@@ -9,6 +9,8 @@
 import {isNgLanguageService, NgLanguageService, PluginConfig} from '@angular/language-service/api';
 import * as assert from 'assert';
 import * as ts from 'typescript/lib/tsserverlibrary';
+import {getLanguageService} from 'vscode-html-languageservice';
+import {TextDocument} from 'vscode-languageserver-textdocument';
 import * as lsp from 'vscode-languageserver/node';
 
 import {ServerOptions} from '../common/initialize';
@@ -18,10 +20,13 @@ import {GetComponentsWithTemplateFile, GetTcbParams, GetTcbRequest, GetTcbRespon
 
 import {readNgCompletionData, tsCompletionEntryToLspCompletionItem} from './completion';
 import {tsDiagnosticToLspDiagnostic} from './diagnostic';
+import {getHTMLVirtualContent, isInsideInlineTemplateRegion} from './embeddedSupport';
 import {resolveAndRunNgcc} from './ngcc';
 import {ServerHost} from './server_host';
 import {filePathToUri, isConfiguredProject, lspPositionToTsPosition, lspRangeToTsPositions, tsTextSpanToLspRange, uriToFilePath} from './utils';
 import {resolve, Version} from './version_provider';
+
+const htmlLS = getLanguageService();
 
 export interface SessionOptions {
   host: ServerHost;
@@ -143,6 +148,7 @@ export class Session {
     conn.onCompletionResolve(p => this.onCompletionResolve(p));
     conn.onRequest(GetComponentsWithTemplateFile, p => this.onGetComponentsWithTemplateFile(p));
     conn.onRequest(GetTcbRequest, p => this.onGetTcb(p));
+    conn.onFoldingRanges(p => this.onFoldingRanges(p));
   }
 
   private onGetTcb(params: GetTcbParams): GetTcbResponse|undefined {
@@ -375,6 +381,7 @@ export class Session {
     };
     return {
       capabilities: {
+        foldingRangeProvider: true,
         textDocumentSync: lsp.TextDocumentSyncKind.Incremental,
         completionProvider: {
           // Only the Ivy LS provides support for additional completion resolution.
@@ -721,10 +728,22 @@ export class Session {
     }
     const {languageService, scriptInfo} = lsInfo;
     const offset = lspPositionToTsPosition(scriptInfo, params.position);
+
     const info = languageService.getQuickInfoAtPosition(scriptInfo.fileName, offset);
     if (!info) {
-      return;
+      const docText = scriptInfo.getSnapshot().getText(0, scriptInfo.getSnapshot().getLength());
+      if (!params.textDocument.uri!.endsWith('ts') ||
+          !isInsideInlineTemplateRegion(docText, offset)) {
+        return;
+      }
+
+      // We're in an inline template and Angular LS didn't provide information. Try getting info
+      // from HTML LS.
+      const vdocContents = getHTMLVirtualContent(docText);
+      const vdoc = TextDocument.create(params.textDocument.uri.toString(), 'html', 0, vdocContents);
+      return htmlLS.doHover(vdoc, params.position, htmlLS.parseHTMLDocument(vdoc));
     }
+
     const {kind, kindModifiers, textSpan, displayParts, documentation} = info;
     let desc = kindModifiers ? kindModifiers + ' ' : '';
     if (displayParts) {
@@ -749,7 +768,24 @@ export class Session {
     };
   }
 
-  private onCompletion(params: lsp.CompletionParams) {
+  // provides folding ranges for inline templates
+  private onFoldingRanges(params: lsp.FoldingRangeParams) {
+    if (!params.textDocument.uri!.endsWith('ts')) {
+      return;
+    }
+
+    const lsInfo = this.getLSAndScriptInfo(params.textDocument);
+    if (lsInfo === undefined) {
+      return;
+    }
+    const {scriptInfo} = lsInfo;
+    const docText = scriptInfo.getSnapshot().getText(0, scriptInfo.getSnapshot().getLength());
+    const vdocContents = getHTMLVirtualContent(docText);
+    const vdoc = TextDocument.create(params.textDocument.uri.toString(), 'html', 0, vdocContents);
+    return htmlLS.getFoldingRanges(vdoc);
+  }
+
+  private onCompletion(params: lsp.CompletionParams): lsp.CompletionItem[]|undefined {
     const lsInfo = this.getLSAndScriptInfo(params.textDocument);
     if (lsInfo === undefined) {
       return;
@@ -761,11 +797,21 @@ export class Session {
         {
             // options
         });
-    if (!completions) {
-      return;
+
+    const completionItems =
+        (completions?.entries ??
+         []).map((e) => tsCompletionEntryToLspCompletionItem(e, params.position, scriptInfo));
+
+    const docText = scriptInfo.getSnapshot().getText(0, scriptInfo.getSnapshot().getLength());
+    if (params.textDocument.uri!.endsWith('ts') && isInsideInlineTemplateRegion(docText, offset)) {
+      const vdocContents = getHTMLVirtualContent(docText);
+      const vdoc = TextDocument.create(params.textDocument.uri.toString(), 'html', 0, vdocContents);
+      const htmlCompletions =
+          htmlLS.doComplete(vdoc, params.position, htmlLS.parseHTMLDocument(vdoc));
+
+      completionItems.push(...htmlCompletions.items);
     }
-    return completions.entries.map(
-        (e) => tsCompletionEntryToLspCompletionItem(e, params.position, scriptInfo));
+    return completionItems;
   }
 
   private onCompletionResolve(item: lsp.CompletionItem): lsp.CompletionItem {

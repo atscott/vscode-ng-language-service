@@ -29,8 +29,17 @@ export class AngularLanguageClient implements vscode.Disposable {
   private readonly outputChannel: vscode.OutputChannel;
   private readonly clientOptions: lsp.LanguageClientOptions;
   private readonly name = 'Angular Language Service';
+  private readonly virtualDocumentContents = new Map<string, string>();
 
   constructor(private readonly context: vscode.ExtensionContext) {
+    vscode.workspace.registerTextDocumentContentProvider('embedded-content', {
+      provideTextDocumentContent: uri => {
+        const originalUri = uri.path.slice(1).slice(0, '.html'.length * -1);
+        const decodedUri = decodeURIComponent(originalUri);
+        return this.virtualDocumentContents.get(decodedUri);
+      }
+    });
+
     this.outputChannel = vscode.window.createOutputChannel(this.name);
     // Options to control the language client
     this.clientOptions = {

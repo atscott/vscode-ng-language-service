@@ -31,6 +31,8 @@ module.exports = [
       'typescript/lib/tsserverlibrary',
       'vscode-languageserver',
       'vscode-uri',
+      'vscode-html-languageservice',
+      'vscode-languageserver-textdocument',
     ],
     plugins: [
       commonjs({
