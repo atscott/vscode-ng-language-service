@@ -15,6 +15,7 @@ import {ProjectLoadingFinish, ProjectLoadingStart, SuggestIvyLanguageService, Su
 import {NgccProgress, NgccProgressToken, NgccProgressType} from '../common/progress';
 import {GetComponentsWithTemplateFile, GetTcbRequest} from '../common/requests';
 
+import {isInsideAngularContext, isInsideTemplateRegion} from './embedded_support';
 import {ProgressReporter} from './progress-reporter';
 
 interface GetTcbResponse {
@@ -50,6 +51,45 @@ export class AngularLanguageClient implements vscode.Disposable {
       // Don't let our output console pop open
       revealOutputChannelOn: lsp.RevealOutputChannelOn.Never,
       outputChannel: this.outputChannel,
+      middleware: {
+        provideDefinition: async (
+            document: vscode.TextDocument, position: vscode.Position,
+            token: vscode.CancellationToken, next: lsp.ProvideDefinitionSignature) => {
+          if (document.languageId === 'typescript' &&
+              !isInsideAngularContext(document.getText(), document.offsetAt(position))) {
+            return;
+          }
+          return next(document, position, token);
+        },
+        provideTypeDefinition: async (
+            document: vscode.TextDocument, position: vscode.Position,
+            token: vscode.CancellationToken, next) => {
+          if (document.languageId === 'typescript' &&
+              !isInsideTemplateRegion(document.getText(), document.offsetAt(position))) {
+            return;
+          }
+          return next(document, position, token);
+        },
+        provideHover: async (
+            document: vscode.TextDocument, position: vscode.Position,
+            token: vscode.CancellationToken, next: lsp.ProvideHoverSignature) => {
+          if (document.languageId === 'typescript' &&
+              !isInsideTemplateRegion(document.getText(), document.offsetAt(position))) {
+            return;
+          }
+          return next(document, position, token);
+        },
+        provideCompletionItem: async (
+            document: vscode.TextDocument, position: vscode.Position,
+            context: vscode.CompletionContext, token: vscode.CancellationToken,
+            next: lsp.ProvideCompletionItemsSignature) => {
+          if (document.languageId === 'typescript' &&
+              !isInsideTemplateRegion(document.getText(), document.offsetAt(position))) {
+            return;
+          }
+          return next(document, position, context, token);
+        }
+      }
     };
   }
 
