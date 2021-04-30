@@ -388,6 +388,9 @@ function constructArgs(ctx: vscode.ExtensionContext): string[] {
   const tsProbeLocations = getProbeLocations(tsdk, ctx.extensionPath);
   args.push('--tsProbeLocations', tsProbeLocations.join(','));
 
+  const watchOptions = config.get('typescript.tsserver.watchOptions', {});
+  args.push('--watchOptions', JSON.stringify(watchOptions));
+
   return args;
 }
 

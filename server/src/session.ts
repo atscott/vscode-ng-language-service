@@ -31,6 +31,7 @@ export interface SessionOptions {
   resolvedNgLsPath: string;
   ivy: boolean;
   logToConsole: boolean;
+  watchOptions?: ts.WatchOptions;
 }
 
 enum LanguageId {
@@ -131,6 +132,7 @@ export class Session {
         // https://devblogs.microsoft.com/typescript/announcing-typescript-4-0/#smarter-auto-imports
         includePackageJsonAutoImports: 'off',
       },
+      watchOptions: options.watchOptions,
     });
 
     const pluginConfig: PluginConfig = {

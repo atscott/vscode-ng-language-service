@@ -44,6 +44,7 @@ function main() {
     resolvedNgLsPath: ng.resolvedPath,
     ivy: isG3 ? true : options.ivy,
     logToConsole: options.logToConsole,
+    watchOptions: options.watchOptions
   });
 
   // Log initialization info

@@ -6,6 +6,8 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
+import ts = require('typescript/lib/tsserverlibrary');
+
 function findArgument(argv: string[], argName: string): string|undefined {
   const index = argv.indexOf(argName);
   if (index < 0 || index === argv.length - 1) {
@@ -37,6 +39,7 @@ interface CommandLineOptions {
   logToConsole: boolean;
   ngProbeLocations: string[];
   tsProbeLocations: string[];
+  watchOptions?: ts.WatchOptions;
 }
 
 export function parseCommandLine(argv: string[]): CommandLineOptions {
@@ -48,6 +51,7 @@ export function parseCommandLine(argv: string[]): CommandLineOptions {
     logToConsole: hasArgument(argv, '--logToConsole'),
     ngProbeLocations: parseStringArray(argv, '--ngProbeLocations'),
     tsProbeLocations: parseStringArray(argv, '--tsProbeLocations'),
+    watchOptions: JSON.parse(findArgument(argv, '--watchOptions') ?? ''),
   };
 }
 
