@@ -13,7 +13,7 @@ import * as lsp from 'vscode-languageclient/node';
 
 import {ProjectLoadingFinish, ProjectLoadingStart, SuggestStrictMode, SuggestStrictModeParams} from '../common/notifications';
 import {NgccProgress, NgccProgressToken, NgccProgressType} from '../common/progress';
-import {GetComponentsWithTemplateFile, GetTcbRequest, IsInAngularProject} from '../common/requests';
+import {GetComponentsWithTemplateFile, GetEditsForFileRenameParams, GetEditsForFileRenameRequest, GetTcbRequest, IsInAngularProject} from '../common/requests';
 import {resolve, Version} from '../common/resolver';
 
 import {isInsideComponentDecorator, isInsideInlineTemplateRegion, isInsideStringLiteral} from './embedded_support';
@@ -147,6 +147,42 @@ export class AngularLanguageClient implements vscode.Disposable {
         }
       }
     };
+    vscode.workspace.onWillRenameFiles((e: vscode.FileWillRenameEvent) => {
+      if (!this.client) {
+        return;
+      }
+
+      const c2pConverter = this.client.code2ProtocolConverter;
+      const requests: Array<Promise<lsp.WorkspaceEdit|null>> = [];
+      for (let f of e.files) {
+        requests.push(this.client.sendRequest(GetEditsForFileRenameRequest, {
+          oldUri: c2pConverter.asUri(f.oldUri),
+          newUri: c2pConverter.asUri(f.newUri),
+        }));
+      }
+      const response = Promise.all(requests).then(allEdits => {
+        const final: lsp.WorkspaceEdit = {};
+        for (const edit of allEdits) {
+          if (!edit) {
+            continue;
+          }
+          final.changes = {...final.changes, ...edit.changes};
+          if (edit.documentChanges && edit.documentChanges.length > 0) {
+            if (!final.documentChanges) {
+              final.documentChanges = [];
+            }
+            final.documentChanges.push(...edit.documentChanges);
+          }
+          final.changeAnnotations = {...final.changeAnnotations, ...edit.changeAnnotations};
+        }
+        if (!final.changeAnnotations && !final.changes && !final.documentChanges) {
+          return undefined;
+        }
+        const p2cConverter = this.client!.protocol2CodeConverter;
+        return p2cConverter.asWorkspaceEdit(final);
+      })
+      e.waitUntil(response);
+    });
   }
 
   private async isInAngularProject(doc: vscode.TextDocument): Promise<boolean> {

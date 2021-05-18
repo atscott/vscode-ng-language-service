@@ -15,11 +15,20 @@ export const GetComponentsWithTemplateFile = new lsp.RequestType<
 export interface GetComponentsWithTemplateFileParams {
   textDocument: lsp.TextDocumentIdentifier;
 }
+export interface GetEditsForFileRenameParams {
+  oldUri: lsp.URI;
+  newUri: lsp.URI;
+}
+
+export const GetEditsForFileRenameRequest =
+    new lsp.RequestType<GetEditsForFileRenameParams, lsp.WorkspaceEdit|null, /* error */ void>(
+        'angular/getEditsForFileRename');
 
 export interface GetTcbParams {
   textDocument: lsp.TextDocumentIdentifier;
   position: lsp.Position;
 }
+
 
 export const GetTcbRequest =
     new lsp.RequestType<GetTcbParams, GetTcbResponse|null, /* error */ void>('angular/getTcb');

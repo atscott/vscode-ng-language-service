@@ -15,7 +15,7 @@ import * as lsp from 'vscode-languageserver/node';
 import {ServerOptions} from '../common/initialize';
 import {ProjectLanguageService, ProjectLoadingFinish, ProjectLoadingStart, SuggestStrictMode} from '../common/notifications';
 import {NgccProgressToken, NgccProgressType} from '../common/progress';
-import {GetComponentsWithTemplateFile, GetTcbParams, GetTcbRequest, GetTcbResponse, IsInAngularProject, IsInAngularProjectParams} from '../common/requests';
+import {GetComponentsWithTemplateFile, GetEditsForFileRenameParams, GetEditsForFileRenameRequest, GetTcbParams, GetTcbRequest, GetTcbResponse, IsInAngularProject, IsInAngularProjectParams} from '../common/requests';
 
 import {readNgCompletionData, tsCompletionEntryToLspCompletionItem} from './completion';
 import {tsDiagnosticToLspDiagnostic} from './diagnostic';
@@ -170,9 +170,14 @@ export class Session {
     conn.onRequest(GetComponentsWithTemplateFile, p => this.onGetComponentsWithTemplateFile(p));
     conn.onRequest(GetTcbRequest, p => this.onGetTcb(p));
     conn.onRequest(IsInAngularProject, p => this.isInAngularProject(p));
+    conn.onRequest(GetEditsForFileRenameRequest, p => this.getEditsForFileRename(p));
     conn.onCodeLens(p => this.onCodeLens(p));
     conn.onCodeLensResolve(p => this.onCodeLensResolve(p));
     conn.onSignatureHelp(p => this.onSignatureHelp(p));
+  }
+
+  private getEditsForFileRename(p: GetEditsForFileRenameParams): lsp.WorkspaceEdit|null {
+    return null;
   }
 
   private isInAngularProject(params: IsInAngularProjectParams): boolean {
