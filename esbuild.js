@@ -52,6 +52,8 @@ const serverConfig = {
     'vscode-languageserver',
     'vscode-uri',
     'vscode-jsonrpc',
+    'vscode-languageserver-textdocument',
+    'vscode-html-languageservice',
   ],
 };
 

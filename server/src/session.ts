@@ -10,6 +10,8 @@ import {isNgLanguageService, NgLanguageService, PluginConfig} from '@angular/lan
 import * as assert from 'assert';
 import * as ts from 'typescript/lib/tsserverlibrary';
 import {promisify} from 'util';
+import {getLanguageService as getHTMLLanguageService} from 'vscode-html-languageservice';
+import {TextDocument} from 'vscode-languageserver-textdocument';
 import * as lsp from 'vscode-languageserver/node';
 
 import {ServerOptions} from '../common/initialize';
@@ -19,9 +21,12 @@ import {GetComponentsWithTemplateFile, GetTcbParams, GetTcbRequest, GetTcbRespon
 
 import {readNgCompletionData, tsCompletionEntryToLspCompletionItem} from './completion';
 import {tsDiagnosticToLspDiagnostic} from './diagnostic';
+import {getHTMLVirtualContent} from './embedded_support';
 import {resolveAndRunNgcc} from './ngcc';
 import {ServerHost} from './server_host';
 import {filePathToUri, isConfiguredProject, isDebugMode, lspPositionToTsPosition, lspRangeToTsPositions, MruTracker, tsDisplayPartsToText, tsTextSpanToLspRange, uriToFilePath} from './utils';
+
+const htmlLS = getHTMLLanguageService();
 
 export interface SessionOptions {
   host: ServerHost;
@@ -173,6 +178,7 @@ export class Session {
     conn.onRenameRequest(p => this.onRenameRequest(p));
     conn.onPrepareRename(p => this.onPrepareRename(p));
     conn.onHover(p => this.onHover(p));
+    conn.onFoldingRanges(p => this.onFoldingRanges(p));
     conn.onCompletion(p => this.onCompletion(p));
     conn.onCompletionResolve(p => this.onCompletionResolve(p));
     conn.onRequest(GetComponentsWithTemplateFile, p => this.onGetComponentsWithTemplateFile(p));
@@ -589,6 +595,7 @@ export class Session {
     return {
       capabilities: {
         codeLensProvider: this.ivy ? {resolveProvider: true} : undefined,
+        foldingRangeProvider: true,
         textDocumentSync: lsp.TextDocumentSyncKind.Incremental,
         completionProvider: {
           // Only the Ivy LS provides support for additional completion resolution.
@@ -973,6 +980,23 @@ export class Session {
       contents,
       range: tsTextSpanToLspRange(scriptInfo, textSpan),
     };
+  }
+
+  private onFoldingRanges(params: lsp.FoldingRangeParams) {
+    if (!params.textDocument.uri!.endsWith('ts')) {
+      return null;
+    }
+
+    const lsInfo = this.getLSAndScriptInfo(params.textDocument);
+    if (lsInfo === null) {
+      return;
+    }
+    const {scriptInfo} = lsInfo;
+    const docText = scriptInfo.getSnapshot().getText(0, scriptInfo.getSnapshot().getLength());
+    const vdocContents = getHTMLVirtualContent(docText);
+    const vdoc = TextDocument.create(params.textDocument.uri.toString(), 'html', 0, vdocContents);
+    const result = htmlLS.getFoldingRanges(vdoc);
+    return result;
   }
 
   private onCompletion(params: lsp.CompletionParams) {
