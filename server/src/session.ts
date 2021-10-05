@@ -6,6 +6,7 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
+import {isNgLanguageService as isVeNgLanguageService, NgLanguageService as VeNgLanguageService, PluginConfig as VePluginConfig} from '@angular/language-service-12/api';
 import {isNgLanguageService, NgLanguageService, PluginConfig} from '@angular/language-service/api';
 import * as assert from 'assert';
 import * as ts from 'typescript/lib/tsserverlibrary';
@@ -146,10 +147,9 @@ export class Session {
       }
     });
 
-    const pluginConfig: PluginConfig = {
-      angularOnly: true,
-      ivy: options.ivy,
-    };
+    const vePluginConfig: VePluginConfig = {angularOnly: true, ivy: false};
+    const ivyPluginConfig: PluginConfig = {angularOnly: true, ivy: true};
+    const pluginConfig = options.ivy ? ivyPluginConfig : vePluginConfig;
     if (options.host.isG3) {
       assert(options.ivy === true, 'Ivy LS must be used in google3');
       pluginConfig.forceStrictTemplates = true;
@@ -232,7 +232,7 @@ export class Session {
   private onGetTemplateLocationForComponent(params: GetTemplateLocationForComponentParams):
       lsp.Location|null {
     const lsInfo = this.getLSAndScriptInfo(params.textDocument);
-    if (lsInfo === null) {
+    if (lsInfo === null || !this.isIvyLanguageService(lsInfo.languageService)) {
       return null;
     }
     const {languageService, scriptInfo} = lsInfo;
@@ -934,7 +934,8 @@ export class Session {
   }
 
   private getLSAndScriptInfo(textDocumentOrFileName: lsp.TextDocumentIdentifier|string):
-      {languageService: NgLanguageService, scriptInfo: ts.server.ScriptInfo}|null {
+      {languageService: NgLanguageService|VeNgLanguageService,
+       scriptInfo: ts.server.ScriptInfo}|null {
     const filePath = lsp.TextDocumentIdentifier.is(textDocumentOrFileName) ?
         uriToFilePath(textDocumentOrFileName.uri) :
         textDocumentOrFileName;
@@ -954,7 +955,7 @@ export class Session {
       return null;
     }
     const languageService = project.getLanguageService();
-    if (!isNgLanguageService(languageService)) {
+    if (!isNgLanguageService(languageService) && !isVeNgLanguageService(languageService)) {
       return null;
     }
     return {
@@ -1200,6 +1201,10 @@ export class Session {
       this.enableLanguageServiceForProject(this.projectNgccQueue[i].project);
     }
     this.projectNgccQueue = this.projectNgccQueue.filter(({done}) => !done);
+  }
+
+  private isIvyLanguageService(ls: ts.LanguageService): ls is NgLanguageService {
+    return this.ivy;
   }
 }
 

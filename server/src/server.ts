@@ -10,7 +10,7 @@ import {generateHelpMessage, parseCommandLine} from './cmdline_utils';
 import {createLogger} from './logger';
 import {ServerHost} from './server_host';
 import {Session} from './session';
-import {resolveNgLangSvc, resolveTsServer} from './version_provider';
+import {resolveNgLangSvc, resolveTsServer, resolveVeNgLangSvc} from './version_provider';
 
 function main() {
   // Parse command line arguments
@@ -28,21 +28,25 @@ function main() {
   });
 
   const ts = resolveTsServer(options.tsProbeLocations);
-  const ng = resolveNgLangSvc(options.ngProbeLocations);
 
   const isG3 = ts.resolvedPath.includes('/google3/');
 
   // ServerHost provides native OS functionality
   const host = new ServerHost(isG3);
 
+  const ivy = options.ivy || isG3;
+
+  const ng = ivy ? resolveNgLangSvc(options.ngProbeLocations) :
+                   resolveVeNgLangSvc(options.ngProbeLocations);
+  const ngPlugin = ivy ? '@angular/language-service' : '@angular/language-service-12';
   // Establish a new server session that encapsulates lsp connection.
   const session = new Session({
     host,
     logger,
     // TypeScript allows only package names as plugin names.
-    ngPlugin: '@angular/language-service',
+    ngPlugin,
     resolvedNgLsPath: ng.resolvedPath,
-    ivy: isG3 ? true : options.ivy,
+    ivy,
     logToConsole: options.logToConsole,
     includeAutomaticOptionalChainCompletions: options.includeAutomaticOptionalChainCompletions
   });

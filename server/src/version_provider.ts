@@ -93,6 +93,11 @@ export function resolveNgLangSvc(probeLocations: string[]): NodeModule {
   return resolveWithMinVersion(ngls, MIN_NG_VERSION, probeLocations, ngls);
 }
 
+export function resolveVeNgLangSvc(probeLocations: string[]): NodeModule {
+  const ngls = '@angular/language-service-12';
+  return resolveWithMinVersion(ngls, MIN_NG_VERSION, probeLocations, ngls);
+}
+
 export function resolveNgcc(directory: string): NodeModule|undefined {
   return resolve('@angular/compiler-cli/ngcc/main-ngcc.js', directory, '@angular/compiler-cli');
 }
