@@ -12,10 +12,17 @@ rm -rf **/*.tsbuildinfo
 # Build the client and server
 yarn run compile
 
+# install npm packages in the pinned v12
+pushd pinned_v12_server
+yarn install
+popd
+
 # Copy files to package root
 cp package.json angular.png CHANGELOG.md README.md dist/npm
 # Copy files to server directory
 cp -r server/package.json server/README.md server/bin dist/npm/server
+cp -r pinned_v12_server dist/npm/pinned_v12_server
+cp -r pinned_v12_server dist/pinned_v12_server
 # Build and copy files to syntaxes directory
 yarn run build:syntaxes
 mkdir dist/npm/syntaxes

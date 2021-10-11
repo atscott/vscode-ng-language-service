@@ -405,12 +405,8 @@ function registerProgressHandlers(client: lsp.LanguageClient) {
  * @param configName
  * @param bundled
  */
-function getProbeLocations(configValue: string|null, bundled: string): string[] {
+function getProbeLocations(bundled: string): string[] {
   const locations = [];
-  // Always use config value if it's specified
-  if (configValue) {
-    locations.push(configValue);
-  }
   // Prioritize the bundled version
   locations.push(bundled);
   // Look in workspaces currently open
@@ -425,7 +421,7 @@ function getProbeLocations(configValue: string|null, bundled: string): string[] 
  * Construct the arguments that's used to spawn the server process.
  * @param ctx vscode extension context
  */
-function constructArgs(ctx: vscode.ExtensionContext): string[] {
+function constructArgs(ctx: vscode.ExtensionContext, viewEngine: boolean, v12Server: boolean): string[] {
   const config = vscode.workspace.getConfiguration();
   const args: string[] = ['--logToConsole'];
 
@@ -437,15 +433,15 @@ function constructArgs(ctx: vscode.ExtensionContext): string[] {
     args.push('--logVerbosity', ngLog);
   }
 
-  const ngProbeLocations = getProbeLocations(null, ctx.extensionPath);
-  args.push('--ngProbeLocations', ngProbeLocations.join(','));
-
-  // Because the configuration is typed as "boolean" in package.json, vscode
-  // will return false even when the value is not set. If value is false, then
-  // we need to check if all projects support Ivy language service.
-  const viewEngine: boolean = config.get('angular.view-engine') || !allProjectsSupportIvy();
   if (viewEngine) {
     args.push('--viewEngine');
+  }
+
+  const ngProbeLocations = getProbeLocations(ctx.extensionPath);
+  if (v12Server) {
+    args.push('--ngProbeLocations', [path.join(ctx.extensionPath, 'pinned_v12_server'), ...ngProbeLocations].join(','));
+  } else {
+    args.push('--ngProbeLocations', ngProbeLocations.join(','));
   }
 
   const includeAutomaticOptionalChainCompletions =
@@ -455,7 +451,7 @@ function constructArgs(ctx: vscode.ExtensionContext): string[] {
   }
 
   const tsdk: string|null = config.get('typescript.tsdk', null);
-  const tsProbeLocations = getProbeLocations(tsdk, ctx.extensionPath);
+  const tsProbeLocations = [tsdk, ...getProbeLocations(ctx.extensionPath)];
   args.push('--tsProbeLocations', tsProbeLocations.join(','));
 
   return args;
@@ -469,9 +465,22 @@ function getServerOptions(ctx: vscode.ExtensionContext, debug: boolean): lsp.Nod
     NG_DEBUG: true,
   };
 
+  // Because the configuration is typed as "boolean" in package.json, vscode
+  // will return false even when the value is not set. If value is false, then
+  // we need to check if all projects support Ivy language service.
+  const config = vscode.workspace.getConfiguration();
+  const viewEngine: boolean = config.get('angular.view-engine') || !allProjectsSupportIvy();
+  const useV12Server = viewEngine || !allProjectsAtV13();
+
   // Node module for the language server
+  const args = constructArgs(ctx, viewEngine, useV12Server);
   const prodBundle = ctx.asAbsolutePath('server');
   const devBundle = ctx.asAbsolutePath(path.join('dist', 'server', 'server.js'));
+  // VS Code Insider launches extensions in debug mode by default but users
+  // install prod bundle so we have to check whether dev bundle exists.
+  const latestModule = debug && fs.existsSync(devBundle) ? devBundle : prodBundle;
+  const v12Module = ctx.asAbsolutePath('pinned_v12_server');
+  const module = useV12Server ? v12Module : latestModule;
 
   // Argv options for Node.js
   const prodExecArgv: string[] = [];
@@ -483,11 +492,9 @@ function getServerOptions(ctx: vscode.ExtensionContext, debug: boolean): lsp.Nod
   ];
 
   return {
-    // VS Code Insider launches extensions in debug mode by default but users
-    // install prod bundle so we have to check whether dev bundle exists.
-    module: debug && fs.existsSync(devBundle) ? devBundle : prodBundle,
+    module,
     transport: lsp.TransportKind.ipc,
-    args: constructArgs(ctx),
+    args,
     options: {
       env: debug ? devEnv : prodEnv,
       execArgv: debug ? devExecArgv : prodExecArgv,
@@ -504,6 +511,17 @@ function allProjectsSupportIvy() {
   for (const workspaceFolder of workspaceFolders) {
     const angularCore = resolve('@angular/core', workspaceFolder.uri.fsPath);
     if (angularCore?.version.greaterThanOrEqual(new Version('9')) === false) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function allProjectsAtV13() {
+  const workspaceFolders = vscode.workspace.workspaceFolders || [];
+  for (const workspaceFolder of workspaceFolders) {
+    const angularCore = resolve('@angular/core', workspaceFolder.uri.fsPath);
+    if (angularCore?.version.greaterThanOrEqual(new Version('13')) === false) {
       return false;
     }
   }
