@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {isNgLanguageService, NgLanguageService, PluginConfig} from '@angular/language-service/api';
+import {isNgLanguageService, NgLanguageService, PluginConfig, TemplateQuickFixData} from '@angular/language-service/api';
 import * as ts from 'typescript/lib/tsserverlibrary';
 import {promisify} from 'util';
 import * as lsp from 'vscode-languageserver/node';
@@ -192,6 +192,7 @@ export class Session {
     conn.onCodeLens(p => this.onCodeLens(p));
     conn.onCodeLensResolve(p => this.onCodeLensResolve(p));
     conn.onSignatureHelp(p => this.onSignatureHelp(p));
+    conn.onCodeAction(p => this.onCodeAction(p));
   }
 
   private isInAngularProject(params: IsInAngularProjectParams): boolean|null {
@@ -374,6 +375,30 @@ export class Session {
                                      'Go to component',
     };
     return params;
+  }
+
+  private onCodeAction(params: lsp.CodeActionParams): lsp.CodeAction[]|null {
+    const lsInfo = this.getLSAndScriptInfo(params.textDocument);
+    if (!lsInfo) {
+      return null;
+    }
+
+    const actions: lsp.CodeAction[] = [];
+    for (const diagnostic of params.context.diagnostics) {
+      if (diagnostic.data === undefined) {
+        continue;
+      }
+
+      const {title, replacementSpan, replacementText} = diagnostic.data as TemplateQuickFixData;
+      const range = tsTextSpanToLspRange(lsInfo.scriptInfo, replacementSpan);
+      const textEdit = lsp.TextEdit.replace(range, replacementText);
+      const workspaceEdit: lsp.WorkspaceEdit = {changes: {[params.textDocument.uri]: [textEdit]}};
+      const quickFix = lsp.CodeAction.create(title, workspaceEdit, lsp.CodeActionKind.QuickFix);
+
+      actions.push(quickFix);
+    }
+
+    return actions;
   }
 
   private enableLanguageServiceForProject(project: ts.server.Project): void {
@@ -569,7 +594,14 @@ export class Session {
       // not be updated.
       this.connection.sendDiagnostics({
         uri: filePathToUri(fileName),
-        diagnostics: diagnostics.map(d => tsDiagnosticToLspDiagnostic(d, result.scriptInfo)),
+        diagnostics: diagnostics.map(d => {
+          const lspDiag = tsDiagnosticToLspDiagnostic(d, result.scriptInfo);
+          const quickFixData = result.languageService.getQuickFixDataForDiagnostic(d);
+          if (quickFixData) {
+            lspDiag.data = quickFixData;
+          }
+          return lspDiag;
+        }),
       });
       if (this.diagnosticsTimeout) {
         // There is a pending request to check diagnostics for all open files,
@@ -620,6 +652,7 @@ export class Session {
       scriptInfo.detachAllProjects();
       scriptInfo.attachToProject(project);
     }
+    this.logger.info(`Using project ${project.projectName} for request.`);
     this.createExternalProject(project);
 
     return project;
@@ -635,6 +668,11 @@ export class Session {
     return {
       capabilities: {
         codeLensProvider: this.ivy ? {resolveProvider: true} : undefined,
+        codeActionProvider:
+            // The quick fix implementation relies on the `data` property on diagnostics
+            (this.ivy && params.capabilities.textDocument?.publishDiagnostics?.dataSupport) ?
+            {codeActionKinds: [lsp.CodeActionKind.QuickFix]} :
+            undefined,
         textDocumentSync: lsp.TextDocumentSyncKind.Incremental,
         completionProvider: {
           // Only the Ivy LS provides support for additional completion resolution.
