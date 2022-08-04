@@ -1,0 +1,5 @@
+{
+  "spec": [
+    "dist/integration/lsp/*_spec.js"
+  ]
+}

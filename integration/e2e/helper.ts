@@ -14,7 +14,6 @@ function sleep(ms: number) {
 
 export async function activate(uri: vscode.Uri) {
   // set default timeout to 30 seconds
-  jasmine.DEFAULT_TIMEOUT_INTERVAL = 30_000;
   await vscode.window.showTextDocument(uri);
   await waitForDefinitionsToBeAvailable(20);
 }

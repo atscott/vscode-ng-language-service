@@ -5,6 +5,10 @@
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
+import {expect, use} from 'chai';
+import * as chaiAsPromised from 'chai-as-promised';
+import * as chaiLike from 'chai-like';
+import * as chaiThings from 'chai-things';
 import * as vscode from 'vscode';
 import {DocumentUri, TextDocument} from 'vscode-languageserver-textdocument';
 
@@ -95,7 +99,7 @@ function test(
   const vdoc = TextDocument.create('test' as DocumentUri, 'typescript', 0, text) as {} as
       vscode.TextDocument;
   const actual = testFn(vdoc, vdoc.positionAt(cursor));
-  expect(actual).toBe(expectation);
+  expect(actual).to.equal(expectation);
 }
 
 /**

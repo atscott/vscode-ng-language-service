@@ -1,0 +1,7 @@
+{
+  "spec": [
+    "dist/client/tests/*_spec.js",
+    "dist/common/tests/*_spec.js",
+    "dist/server/tests/*_spec.js"
+  ]
+}

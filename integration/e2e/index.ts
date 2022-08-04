@@ -1,11 +1,12 @@
+import {runTests} from '@vscode/test-electron';
 import {join} from 'path';
-import {runTests} from 'vscode-test';
 
 import {PACKAGE_ROOT, PROJECT_PATH} from '../test_constants';
 
+// https://code.visualstudio.com/api/working-with-extensions/testing-extension
 async function main() {
   const EXT_DEVELOPMENT_PATH = join(PACKAGE_ROOT, 'dist', 'npm');
-  const EXT_TESTS_PATH = join(PACKAGE_ROOT, 'dist', 'integration', 'e2e', 'jasmine');
+  const EXT_TESTS_PATH = join(PACKAGE_ROOT, 'dist', 'integration', 'e2e', 'mocha');
 
   try {
     await runTests({

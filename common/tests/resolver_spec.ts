@@ -6,6 +6,7 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
+import {expect} from 'chai';
 import {Version} from '../resolver';
 
 describe('Version', () => {
@@ -19,9 +20,9 @@ describe('Version', () => {
     ];
     for (const [versionStr, major, minor, patch] of cases) {
       const v = new Version(versionStr);
-      expect(v.major).toBe(major);
-      expect(v.minor).toBe(minor);
-      expect(v.patch).toBe(patch);
+      expect(v.major).to.equal(major);
+      expect(v.minor).to.equal(minor);
+      expect(v.patch).to.equal(patch);
     }
   });
 
@@ -52,7 +53,7 @@ describe('Version', () => {
     for (const [s1, s2, result] of cases) {
       const v1 = new Version(s1);
       const v2 = new Version(s2);
-      expect(v1.greaterThanOrEqual(v2)).toBe(result, `Expect ${v1} >= ${v2}`);
+      expect(v1.greaterThanOrEqual(v2)).to.equal(result, `Expect ${v1} >= ${v2}`);
     }
   });
 });
