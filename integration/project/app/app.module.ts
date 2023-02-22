@@ -11,6 +11,19 @@ import {FooComponent} from './foo.component';
     PostModule,
   ],
   declarations: [
+    FooComponent,
+  ],
+})
+export class OtherModule {
+}
+
+@NgModule({
+  imports: [
+    CommonModule,
+    PostModule,
+    OtherModule,
+  ],
+  declarations: [
     AppComponent,
     FooComponent,
   ],
